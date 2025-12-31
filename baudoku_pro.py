@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 # =========================
 # KONFIGURATION
 # =========================
-API_KEY = "AIzaSyAgDpAkTJlbqWADqqGrvZFFZp76tznY5C0" # <--- PRÜFEN!
+API_KEY = "AIzaSyBc-Zem9VneRSQ1prJHUKbsSRpzOppgfJ4" # <--- NEUEN KEY HIER REIN!
 BASIS_PFAD = "Bau_Projekte"
 
 MAX_TAGE_TEST = 5        
@@ -19,6 +19,7 @@ MAX_BILDER_PRO_TAG = 3
 LOESCHEN_AKTIV = False   
 ZEICHEN_PRO_ZEILE = 85   
 DRY_RUN = False          
+MOCK_MODE = False        # Setze auf True zum Testen OHNE KI (schneller)
 
 PROJEKT_AUFTRAGGEBER = "TransnetBW Erw. Umspannwerk"
 PROJEKT_BAUSTELLE = "810325005 Grünkraut"
@@ -36,7 +37,7 @@ def setup_logger(project):
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s"
     )
-    logging.info("===== PROGRAMMSTART (V41 - STABLE MODEL) =====")
+    logging.info(f"===== PROGRAMMSTART (V44 - RECOVERY) Mock={MOCK_MODE} =====")
 
 # =========================
 # STATUS & ZÄHLER
@@ -136,26 +137,39 @@ JSON STRUKTUR:
 # GENERATE
 # =========================
 def generate_report(images, prompt):
+    if MOCK_MODE:
+        time.sleep(1)
+        return type('obj', (object,), {
+            'text': json.dumps({
+                "wetter_vormittag": "MOCK Sonnig", "wetter_nachmittag": "MOCK Wolkig",
+                "temp_min": 10, "temp_max": 20,
+                "personal_aufsicht": 1, "personal_facharbeiter": 2, "personal_maschinist": 1,
+                "beschreibung_arbeiten": ["MOCK Arbeit 1", "MOCK Arbeit 2"],
+                "geraete_liste": ["MOCK Bagger"], "material_liste": ["MOCK Beton"], "sonstiges": []
+            })
+        })()
+
     genai.configure(api_key=API_KEY)
     retries = 3
     delay = 60
-    # WICHTIG: 1.5 zuerst, weil 2.0 manchmal zickt
-    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]
+    # Priorisiere stabile Modelle
+    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest"]
     
     for m in models:
-        # print(f"   ...Versuche Modell: {m}")
         for i in range(retries):
             try:
                 model = genai.GenerativeModel(m, generation_config={"response_mime_type": "application/json"})
                 uploads = [genai.upload_file(i) for i in images]
                 return model.generate_content([prompt, *uploads])
             except Exception as e:
-                if "429" in str(e):
+                if "429" in str(e): # Quota
                     print(f"⚠️ Quota Limit ({m}). Warte {delay}s...")
                     time.sleep(delay)
                     delay += 30
+                elif "403" in str(e): # API Key ungültig
+                    print(f"❌ API KEY FEHLER: {e}")
+                    return None # Sofortiger Abbruch bei Key-Fehler
                 elif "404" in str(e): 
-                    # print(f"   Modell {m} nicht gefunden.")
                     break
                 else: 
                     print(f"❌ API Fehler bei {m}: {e}")
@@ -243,7 +257,7 @@ def fill_weekly_excel(path, data, date_str, nr):
 # MAIN
 # =========================
 def main():
-    print("🏗️ BAUDOKU START V41 (STABLE MODEL)")
+    print("🏗️ BAUDOKU START V44 (RECOVERY)")
     
     if not os.path.exists(BASIS_PFAD):
         print("❌ Keine Projekte gefunden.")
@@ -264,11 +278,14 @@ def main():
     out_base = os.path.join(BASIS_PFAD,curr_proj,"1.4 Berichte","1.4.1 Tagesberichte","Fertig")
     lv_path = os.path.join(BASIS_PFAD,curr_proj,"Projekt_Infos")
 
+    # LV Laden
     lv_text = ""
     if os.path.exists(lv_path):
         for f in os.listdir(lv_path):
             if f.endswith(".txt"):
-                try: with open(os.path.join(lv_path,f),'r',encoding='utf-8') as file: lv_text+=file.read()
+                try: 
+                    with open(os.path.join(lv_path,f),'r',encoding='utf-8') as file: 
+                        lv_text+=file.read()
                 except: pass
             elif f.endswith(".pdf"):
                 try:
@@ -330,7 +347,11 @@ def main():
             imgs = days[date_key][:MAX_BILDER_PRO_TAG]
             resp = generate_report(imgs, build_prompt(lv_text))
             
-            if not resp or not resp.text: raise Exception("KI lieferte keine Antwort")
+            if not resp:
+                print("❌ Abbruch: API Key Fehler oder keine Antwort.")
+                break
+            
+            if not resp.text: raise Exception("KI lieferte leere Antwort")
             
             data = safe_json_load(resp.text)
             if not data: raise ValueError("JSON ungültig")
@@ -361,8 +382,9 @@ def main():
             print(f"   ❌ Fehler: {e}")
 
         save_status(curr_proj, status)
-        print("   💤 Pause...")
-        time.sleep(45)
+        if not MOCK_MODE:
+            print("   💤 Pause...")
+            time.sleep(45)
 
     print("✅ FERTIG")
 
