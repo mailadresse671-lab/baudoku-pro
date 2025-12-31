@@ -11,18 +11,15 @@ warnings.filterwarnings("ignore")
 # =========================
 # KONFIGURATION
 # =========================
-API_KEY = "AIzaSyAgDpAkTJlbqWADqqGrvZFFZp76tznY5C0"
+API_KEY = "AIzaSyAgDpAkTJlbqWADqqGrvZFFZp76tznY5C0" # <--- PRÜFEN!
 BASIS_PFAD = "Bau_Projekte"
 
-# --- Modus-Einstellungen ---
-MOCK_MODE = False        # True = Testdaten ohne KI (schnell für Layout-Tests), False = Echte KI
-MAX_TAGE_TEST = 5        # Stoppt nach X Tagen (Sicherheitsbremse)
-MAX_BILDER_PRO_TAG = 3   # Bilder pro Anfrage (Quota sparen)
-LOESCHEN_AKTIV = False   # False = Bilder bleiben in Eingang_Fotos (Kopie)
-ZEICHEN_PRO_ZEILE = 85   # Automatischer Zeilenumbruch in Excel
-DRY_RUN = False          # False = Excel wirklich speichern
+MAX_TAGE_TEST = 5        
+MAX_BILDER_PRO_TAG = 3   
+LOESCHEN_AKTIV = False   
+ZEICHEN_PRO_ZEILE = 85   
+DRY_RUN = False          
 
-# --- Projekt-Stammdaten ---
 PROJEKT_AUFTRAGGEBER = "TransnetBW Erw. Umspannwerk"
 PROJEKT_BAUSTELLE = "810325005 Grünkraut"
 PROJEKT_BEARBEITER = "Beham"
@@ -39,7 +36,7 @@ def setup_logger(project):
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s"
     )
-    logging.info(f"===== PROGRAMMSTART (MockMode={MOCK_MODE}) =====")
+    logging.info("===== PROGRAMMSTART (V41 - STABLE MODEL) =====")
 
 # =========================
 # STATUS & ZÄHLER
@@ -104,7 +101,7 @@ def get_date_taken(path, filename):
     return datetime.fromtimestamp(os.path.getmtime(path)).strftime('%Y:%m:%d %H:%M:%S')
 
 # =========================
-# KI INTERAKTION
+# KI PROMPT
 # =========================
 def build_prompt(lv_text):
     return f"""
@@ -135,35 +132,18 @@ JSON STRUKTUR:
 }}
 """
 
+# =========================
+# GENERATE
+# =========================
 def generate_report(images, prompt):
-    # --- MOCK MODE (SIMULATION) ---
-    if MOCK_MODE:
-        time.sleep(0.5) # Kurze Wartezeit simulieren
-        print("   🤖 [MOCK] Generiere Testdaten...")
-        mock_data = {
-            "wetter_vormittag": "Sonnig, 20°C (MOCK)",
-            "wetter_nachmittag": "Bewölkt, 22°C (MOCK)",
-            "temp_min": 15, "temp_max": 25,
-            "personal_aufsicht": 1, "personal_facharbeiter": 3, "personal_maschinist": 2,
-            "beschreibung_arbeiten": [
-                "Pos. 01.01 Baustelleneinrichtung (MOCK)",
-                "Pos. 02.05 Aushub Baugrube (MOCK) - Dies ist ein sehr langer Text um den Zeilenumbruch in Excel zu testen.",
-                "Pos. 03.01 Betonage Sauberkeitsschicht"
-            ],
-            "geraete_liste": ["Bagger 16t", "Radlader"],
-            "material_liste": ["Beton C25/30", "KG Rohr DN150"],
-            "sonstiges": ["Behinderung durch Parkende PKW (MOCK)"]
-        }
-        # Wir geben ein Objekt zurück, das wie die Gemini-Antwort aussieht (hat .text Attribut)
-        return type('obj', (object,), {'text': json.dumps(mock_data)})()
-    # ------------------------------
-
     genai.configure(api_key=API_KEY)
     retries = 3
     delay = 60
-    models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    # WICHTIG: 1.5 zuerst, weil 2.0 manchmal zickt
+    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]
     
     for m in models:
+        # print(f"   ...Versuche Modell: {m}")
         for i in range(retries):
             try:
                 model = genai.GenerativeModel(m, generation_config={"response_mime_type": "application/json"})
@@ -174,8 +154,12 @@ def generate_report(images, prompt):
                     print(f"⚠️ Quota Limit ({m}). Warte {delay}s...")
                     time.sleep(delay)
                     delay += 30
-                elif "404" in str(e): break
-                else: break
+                elif "404" in str(e): 
+                    # print(f"   Modell {m} nicht gefunden.")
+                    break
+                else: 
+                    print(f"❌ API Fehler bei {m}: {e}")
+                    break
     return None
 
 # =========================
@@ -184,7 +168,6 @@ def generate_report(images, prompt):
 def fill_weekly_excel(path, data, date_str, nr):
     wb = openpyxl.load_workbook(path, keep_vba=True)
     
-    # Wochentag -> Tab Name
     dt = datetime.strptime(date_str, '%d.%m.%Y')
     wochentage = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"]
     tag_name = wochentage[dt.weekday()]
@@ -196,7 +179,6 @@ def fill_weekly_excel(path, data, date_str, nr):
         print(f"      ⚠️ Reiter '{tag_name}' nicht gefunden! Nehme aktives Blatt.")
         ws = wb.active
 
-    # Hilfsfunktion: Zelle schreiben (Merge-Sicher)
     def w(cell_ref, val): 
         try:
             target = ws[cell_ref]
@@ -208,7 +190,6 @@ def fill_weekly_excel(path, data, date_str, nr):
             target.alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
         except: pass
 
-    # Hilfsfunktion: Liste schreiben (Zeile für Zeile mit Umbruch)
     def w_list(start_cell, items):
         if not items: return
         if isinstance(items, str): items = [items]
@@ -221,25 +202,22 @@ def fill_weekly_excel(path, data, date_str, nr):
         curr_row = start_row
         
         for item in items:
-            # Text umbrechen
             lines = textwrap.wrap(str(item), width=ZEICHEN_PRO_ZEILE)
-            
             for line in lines:
                 target = ws.cell(row=curr_row, column=col_idx)
                 for rng in ws.merged_cells.ranges:
                     if target.coordinate in rng:
                         target = ws.cell(row=rng.min_row, column=rng.min_col)
                         break
-                
                 target.value = line
                 target.alignment = Alignment(wrap_text=False, vertical='bottom', horizontal='left')
                 curr_row += 1
 
-    # --- DATEN EINTRAGEN ---
-    w("D1", nr); w("F1", nr) # Nummer
+    # DATEN
+    w("D1", nr); w("F1", nr)
     w("C2", PROJEKT_AUFTRAGGEBER)
     w("C3", PROJEKT_BAUSTELLE)
-    w("C4", date_str) # Datum
+    w("C4", date_str)
     w("C6", PROJEKT_BEARBEITER)
 
     w("B8", data.get("wetter_vormittag", "")) 
@@ -256,7 +234,7 @@ def fill_weekly_excel(path, data, date_str, nr):
     w_list("B17", data.get("beschreibung_arbeiten", []))
     w_list("B32", data.get("geraete_liste", []))
     w_list("B37", data.get("material_liste", []))
-    w_list("B41", data.get("sonstiges", [])) # Sonstiges jetzt korrekt in B41
+    w_list("B41", data.get("sonstiges", []))
 
     if not DRY_RUN:
         wb.save(path)
@@ -265,7 +243,7 @@ def fill_weekly_excel(path, data, date_str, nr):
 # MAIN
 # =========================
 def main():
-    print("🏗️ BAUDOKU START V39 (FINAL + MOCK)")
+    print("🏗️ BAUDOKU START V41 (STABLE MODEL)")
     
     if not os.path.exists(BASIS_PFAD):
         print("❌ Keine Projekte gefunden.")
@@ -286,13 +264,11 @@ def main():
     out_base = os.path.join(BASIS_PFAD,curr_proj,"1.4 Berichte","1.4.1 Tagesberichte","Fertig")
     lv_path = os.path.join(BASIS_PFAD,curr_proj,"Projekt_Infos")
 
-    # LV Laden
     lv_text = ""
     if os.path.exists(lv_path):
         for f in os.listdir(lv_path):
             if f.endswith(".txt"):
-                try: 
-                    with open(os.path.join(lv_path,f),'r',encoding='utf-8') as file: lv_text+=file.read()
+                try: with open(os.path.join(lv_path,f),'r',encoding='utf-8') as file: lv_text+=file.read()
                 except: pass
             elif f.endswith(".pdf"):
                 try:
@@ -300,7 +276,6 @@ def main():
                     for p in r.pages: lv_text+=p.extract_text()
                 except: pass
     
-    # Vorlage suchen
     tpl_file = None
     if os.path.exists(tpl_dir):
         for f in os.listdir(tpl_dir):
@@ -355,7 +330,7 @@ def main():
             imgs = days[date_key][:MAX_BILDER_PRO_TAG]
             resp = generate_report(imgs, build_prompt(lv_text))
             
-            if not resp: raise Exception("KI lieferte keine Antwort")
+            if not resp or not resp.text: raise Exception("KI lieferte keine Antwort")
             
             data = safe_json_load(resp.text)
             if not data: raise ValueError("JSON ungültig")
@@ -386,9 +361,8 @@ def main():
             print(f"   ❌ Fehler: {e}")
 
         save_status(curr_proj, status)
-        if not MOCK_MODE:
-            print("   💤 Pause...")
-            time.sleep(45)
+        print("   💤 Pause...")
+        time.sleep(45)
 
     print("✅ FERTIG")
 
