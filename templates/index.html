@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Projekte – BauDoku Pro{% endblock %}
+
+{% block content %}
+<div class="page-title">Meine Projekte</div>
+
+{% if projekte %}
+  <div class="card-list">
+    {% for p in projekte %}
+    <a href="/projekt/{{ p }}" class="card card-projekt">
+      <div class="card-icon">📁</div>
+      <div class="card-body">
+        <div class="card-title">{{ p }}</div>
+        <div class="card-sub">Tippen zum Öffnen</div>
+      </div>
+      <div class="card-arrow">›</div>
+    </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📂</div>
+    <div class="empty-text">Noch keine Projekte vorhanden.</div>
+    <div class="empty-hint">Ordner in <code>Bau_Projekte/</code> anlegen.</div>
+  </div>
+{% endif %}
+{% endblock %}

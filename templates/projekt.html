@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ projekt }} – BauDoku Pro{% endblock %}
+{% block header_sub %}{{ projekt }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/" class="btn btn-back">← Zurück</a>
+  <div class="page-title">{{ projekt }}</div>
+  <a href="/projekt/{{ projekt }}/einstellungen" class="btn btn-secondary">⚙️ Einstellungen</a>
+</div>
+
+<div class="info-box">
+  <span>👤 {{ info.bearbeiter or '–' }}</span>
+  <span>🏢 {{ info.auftraggeber or '–' }}</span>
+</div>
+
+{% if tage %}
+<div class="section-title">Arbeitstage mit Fotos</div>
+<div class="card-list">
+  {% for tag in tage %}
+  <div class="card card-tag {% if tag.status == 'fertig' %}card-fertig{% endif %}">
+    <div class="tag-datum">
+      <div class="tag-wochentag">{{ tag.wochentag }}</div>
+      <div class="tag-date">{{ tag.datum_anzeige }}</div>
+    </div>
+    <div class="tag-info">
+      <span class="fotos-badge">📷 {{ tag.anzahl_fotos }} Fotos</span>
+      {% if tag.status == 'fertig' %}
+        <span class="status-badge status-fertig">✅ Fertig</span>
+      {% else %}
+        <span class="status-badge status-offen">⏳ Offen</span>
+      {% endif %}
+    </div>
+    {% if tag.status != 'fertig' %}
+    <div class="tag-actions">
+      <form action="/analysiere/{{ projekt }}/{{ tag.datum_key }}" method="post">
+        <input type="hidden" name="report_type" value="bautagesbericht">
+        <button type="submit" class="btn btn-primary">📋 Tagesbericht</button>
+      </form>
+      <form action="/analysiere/{{ projekt }}/{{ tag.datum_key }}" method="post">
+        <input type="hidden" name="report_type" value="regiebericht">
+        <button type="submit" class="btn btn-regie">📝 Regiebericht</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">📷</div>
+  <div class="empty-text">Noch keine Fotos vorhanden.</div>
+  <div class="empty-hint">
+    Fotos in <code>{{ projekt }}/Eingang_Fotos/</code> ablegen<br>
+    oder Google Drive Sync einrichten.
+  </div>
+</div>
+{% endif %}
+
+<script>
+// Ladeanzeige beim KI-Start
+document.querySelectorAll('form').forEach(form => {
+  form.addEventListener('submit', function(e) {
+    const btn = this.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = '⏳ KI analysiert...';
+    // Overlay anzeigen
+    document.getElementById('ladeoverlay').style.display = 'flex';
+  });
+});
+</script>
+
+<div id="ladeoverlay" style="display:none" class="ladeoverlay">
+  <div class="ladeoverlay-box">
+    <div class="lade-spinner">⏳</div>
+    <div class="lade-text">KI analysiert Fotos…</div>
+    <div class="lade-hint">Das dauert ca. 20–40 Sekunden</div>
+  </div>
+</div>
+{% endblock %}

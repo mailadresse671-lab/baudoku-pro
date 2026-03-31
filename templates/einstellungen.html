@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen – {{ projekt }}{% endblock %}
+{% block header_sub %}Einstellungen{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/projekt/{{ projekt }}" class="btn btn-back">← Zurück</a>
+  <div class="page-title">Projekt-Einstellungen</div>
+</div>
+
+<form action="/projekt/{{ projekt }}/einstellungen" method="post">
+  <div class="form-section">
+    <div class="form-section-title">📋 Projektdaten</div>
+    <div class="form-group">
+      <label>Auftraggeber</label>
+      <input type="text" name="auftraggeber" value="{{ info.auftraggeber }}" class="form-input">
+    </div>
+    <div class="form-group">
+      <label>Baustelle / Projektnummer</label>
+      <input type="text" name="baustelle" value="{{ info.baustelle }}" class="form-input">
+    </div>
+    <div class="form-group">
+      <label>Bearbeiter (dein Name)</label>
+      <input type="text" name="bearbeiter" value="{{ info.bearbeiter }}" class="form-input">
+    </div>
+  </div>
+  <div class="form-submit">
+    <button type="submit" class="btn btn-success btn-lg">💾 Speichern</button>
+  </div>
+</form>
+{% endblock %}

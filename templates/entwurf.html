@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Entwurf prüfen – BauDoku Pro{% endblock %}
+{% block header_sub %}Entwurf prüfen{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/projekt/{{ projekt }}" class="btn btn-back">← Zurück</a>
+  <div class="page-title">
+    {% if report_type == 'bautagesbericht' %}📋 Bautagesbericht{% else %}📝 Regiebericht{% endif %}
+  </div>
+</div>
+
+<div class="entwurf-datum">
+  {% set dt_parts = datum.split('-') %}
+  {{ dt_parts[2] }}.{{ dt_parts[1] }}.{{ dt_parts[0] }}
+</div>
+
+{% if ki_daten.ki_hinweise %}
+<div class="hinweis-box">
+  <strong>💡 KI-Hinweise (bitte prüfen):</strong>
+  <ul>
+    {% for h in ki_daten.ki_hinweise %}
+    <li>{{ h }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form action="/bestaetigen/{{ entwurf_id }}" method="post">
+
+  {% if report_type == 'bautagesbericht' %}
+  <!-- ─── WETTER ─── -->
+  <div class="form-section">
+    <div class="form-section-title">🌤️ Wetter</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Vormittag</label>
+        <input type="text" name="wetter_vormittag"
+               value="{{ ki_daten.wetter_vormittag or '' }}" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>Nachmittag</label>
+        <input type="text" name="wetter_nachmittag"
+               value="{{ ki_daten.wetter_nachmittag or '' }}" class="form-input">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Temp. Min (°C)</label>
+        <input type="number" name="temp_min"
+               value="{{ ki_daten.temp_min or 0 }}" class="form-input form-input-sm">
+      </div>
+      <div class="form-group">
+        <label>Temp. Max (°C)</label>
+        <input type="number" name="temp_max"
+               value="{{ ki_daten.temp_max or 0 }}" class="form-input form-input-sm">
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── PERSONAL ─── -->
+  <div class="form-section">
+    <div class="form-section-title">👷 Personal</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Aufsicht</label>
+        <input type="number" name="personal_aufsicht" min="0"
+               value="{{ ki_daten.personal_aufsicht or 0 }}" class="form-input form-input-sm">
+      </div>
+      <div class="form-group">
+        <label>Facharbeiter</label>
+        <input type="number" name="personal_facharbeiter" min="0"
+               value="{{ ki_daten.personal_facharbeiter or 0 }}" class="form-input form-input-sm">
+      </div>
+      <div class="form-group">
+        <label>Maschinist</label>
+        <input type="number" name="personal_maschinist" min="0"
+               value="{{ ki_daten.personal_maschinist or 0 }}" class="form-input form-input-sm">
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── LV-POSITIONEN ─── -->
+  <div class="form-section">
+    <div class="form-section-title">📑 LV-Positionen</div>
+    <div class="form-hint">Eine pro Zeile. Mengen bitte selbst eintragen.</div>
+    <textarea name="lv_positionen" class="form-textarea" rows="4">{{ (ki_daten.lv_positionen or []) | join('\n') }}</textarea>
+  </div>
+
+  {% endif %}{# bautagesbericht #}
+
+  <!-- ─── ARBEITEN ─── -->
+  <div class="form-section">
+    <div class="form-section-title">🔨 Beschreibung der Arbeiten</div>
+    <div class="form-hint">Eine Tätigkeit pro Zeile.</div>
+    <textarea name="beschreibung_arbeiten" class="form-textarea" rows="6">{{ (ki_daten.beschreibung_arbeiten or []) | join('\n') }}</textarea>
+  </div>
+
+  {% if report_type == 'regiebericht' %}
+  <!-- ─── GRUND REGIE ─── -->
+  <div class="form-section">
+    <div class="form-section-title">📋 Begründung Regiearbeit</div>
+    <textarea name="grund_regie" class="form-textarea" rows="3">{{ ki_daten.grund_regie or '' }}</textarea>
+  </div>
+  {% endif %}
+
+  <!-- ─── GERÄTE ─── -->
+  <div class="form-section">
+    <div class="form-section-title">🚜 Geräte / Maschinen</div>
+    <div class="form-hint">Eine pro Zeile.</div>
+    <textarea name="geraete_liste" class="form-textarea" rows="4">{{ (ki_daten.geraete_liste or []) | join('\n') }}</textarea>
+  </div>
+
+  <!-- ─── MATERIAL ─── -->
+  <div class="form-section">
+    <div class="form-section-title">📦 Material</div>
+    <div class="form-hint">Eine Materialposition pro Zeile.</div>
+    <textarea name="material_liste" class="form-textarea" rows="3">{{ (ki_daten.material_liste or []) | join('\n') }}</textarea>
+  </div>
+
+  <!-- ─── SONSTIGES ─── -->
+  <div class="form-section">
+    <div class="form-section-title">📌 Sonstiges / Bemerkungen</div>
+    <textarea name="sonstiges" class="form-textarea" rows="3">{{ (ki_daten.sonstiges or []) | join('\n') }}</textarea>
+  </div>
+
+  <!-- ─── FOTOS VORSCHAU ─── -->
+  <div class="form-section">
+    <div class="form-section-title">📷 Fotos ({{ bilder|length }})</div>
+    <div class="foto-grid">
+      {% for bild in bilder %}
+      <img src="/foto/{{ bild | replace(basis_pfad + '/', '') }}"
+           class="foto-thumb" loading="lazy" alt="Foto">
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ─── BESTÄTIGEN ─── -->
+  <div class="form-submit">
+    <button type="submit" class="btn btn-success btn-lg">
+      ✅ Bericht speichern & Excel erstellen
+    </button>
+    <a href="/projekt/{{ projekt }}" class="btn btn-secondary btn-lg">Abbrechen</a>
+  </div>
+
+</form>
+{% endblock %}
