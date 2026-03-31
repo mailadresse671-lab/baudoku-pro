@@ -90,28 +90,19 @@ def _get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
-def _finde_ordner_id(service, ordner_name: str) -> str | None:
-    result = service.files().list(
-        q=f"name='{ordner_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-        fields="files(id, name)"
-    ).execute()
-    files = result.get("files", [])
-    return files[0]["id"] if files else None
-
-
 def lade_drive_fotos(ziel_ordner: str) -> dict[str, list[str]]:
     """
-    Lädt Fotos aus dem konfigurierten Google Drive Ordner herunter.
-    Speichert sie temporär und gibt dict zurück: {"YYYY-MM-DD": [pfad1, ...]}
+    Lädt Fotos direkt aus dem konfigurierten Google Drive Ordner (per ID).
+    Speichert sie lokal und gibt dict zurück: {"YYYY-MM-DD": [pfad1, ...]}
     """
     from googleapiclient.http import MediaIoBaseDownload
     import io
 
     service = _get_drive_service()
-    ordner_id = _finde_ordner_id(service, config.DRIVE_FOLDER_NAME)
+    ordner_id = config.DRIVE_FOLDER_ID
 
     if not ordner_id:
-        raise ValueError(f"Google Drive Ordner '{config.DRIVE_FOLDER_NAME}' nicht gefunden.")
+        raise ValueError("DRIVE_FOLDER_ID fehlt in der .env Datei.")
 
     result = service.files().list(
         q=f"'{ordner_id}' in parents and trashed=false",

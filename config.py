@@ -6,8 +6,8 @@ load_dotenv()
 # API Keys
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 
-# Google Drive
-DRIVE_FOLDER_NAME = os.getenv("DRIVE_FOLDER_NAME", "Baudoku")
+# Google Drive - Ordner-ID direkt aus der URL
+DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "1j8H5CI8ME2erPRUHKaf4y1FELsQQk6pt")
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 
