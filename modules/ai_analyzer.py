@@ -1,7 +1,7 @@
-import base64
 import json
 import re
-import anthropic
+import time
+import google.generativeai as genai
 import config
 
 BAUTAGESBERICHT_FELDER = """
@@ -44,14 +44,6 @@ REGIEBERICHT_FELDER = """
 """
 
 
-def _encode_image(path: str) -> tuple[str, str]:
-    ext = path.rsplit(".", 1)[-1].lower()
-    media_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    with open(path, "rb") as f:
-        data = base64.standard_b64encode(f.read()).decode("utf-8")
-    return data, media_type
-
-
 def _build_prompt(lv_text: str, report_type: str) -> str:
     felder = BAUTAGESBERICHT_FELDER if report_type == "bautagesbericht" else REGIEBERICHT_FELDER
 
@@ -88,36 +80,41 @@ Antworte nur mit dem JSON-Objekt, kein Text davor oder danach."""
 
 
 def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbericht") -> dict:
-    if not config.CLAUDE_API_KEY:
-        raise ValueError("CLAUDE_API_KEY fehlt in der .env Datei")
+    if not config.GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY fehlt in der .env Datei")
 
-    client = anthropic.Anthropic(api_key=config.CLAUDE_API_KEY)
-
-    content = []
-
-    # Bilder hinzufügen (max 10)
-    for path in image_paths[:config.MAX_BILDER_PRO_TAG]:
-        try:
-            data, media_type = _encode_image(path)
-            content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": media_type, "data": data}
-            })
-        except Exception as e:
-            print(f"Bild konnte nicht geladen werden {path}: {e}")
-
-    if not content:
-        raise ValueError("Keine Bilder konnten geladen werden")
-
-    content.append({"type": "text", "text": _build_prompt(lv_text, report_type)})
-
-    response = client.messages.create(
-        model=config.CLAUDE_MODEL,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": content}]
+    genai.configure(api_key=config.GEMINI_API_KEY)
+    model = genai.GenerativeModel(
+        "gemini-1.5-flash",
+        generation_config={"response_mime_type": "application/json"}
     )
 
-    raw = response.content[0].text.strip()
+    # Bilder hochladen (max 10)
+    uploads = []
+    for path in image_paths[:config.MAX_BILDER_PRO_TAG]:
+        try:
+            uploads.append(genai.upload_file(path))
+        except Exception as e:
+            print(f"Bild konnte nicht hochgeladen werden {path}: {e}")
+
+    if not uploads:
+        raise ValueError("Keine Bilder konnten hochgeladen werden")
+
+    prompt = _build_prompt(lv_text, report_type)
+
+    # Mit Retry bei Quota-Fehler
+    for versuch in range(3):
+        try:
+            response = model.generate_content([prompt, *uploads])
+            break
+        except Exception as e:
+            if "429" in str(e) and versuch < 2:
+                print(f"Quota Limit — warte 60 Sekunden...")
+                time.sleep(60)
+            else:
+                raise
+
+    raw = response.text.strip()
 
     # JSON extrahieren falls Markdown vorhanden
     match = re.search(r"\{.*\}", raw, re.DOTALL)

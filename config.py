@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Keys
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Google Drive - Ordner-ID direkt aus der URL
 DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "1j8H5CI8ME2erPRUHKaf4y1FELsQQk6pt")
