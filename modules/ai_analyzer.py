@@ -1,8 +1,20 @@
 import base64
+import io
 import json
 import re
+from PIL import Image
 from groq import Groq
 import config
+
+
+def _encode_image(path: str) -> tuple[str, str]:
+    """Bild auf max 1024px verkleinern und als base64 zurückgeben."""
+    img = Image.open(path)
+    img.thumbnail((1024, 1024), Image.LANCZOS)
+    buffer = io.BytesIO()
+    img.convert("RGB").save(buffer, format="JPEG", quality=70)
+    buffer.seek(0)
+    return base64.standard_b64encode(buffer.read()).decode("utf-8"), "image/jpeg"
 
 BAUTAGESBERICHT_FELDER = """
 {
