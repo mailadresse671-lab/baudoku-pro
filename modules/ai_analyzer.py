@@ -1,7 +1,7 @@
+import base64
 import json
 import re
-import time
-import google.generativeai as genai
+from groq import Groq
 import config
 
 BAUTAGESBERICHT_FELDER = """
@@ -44,12 +44,20 @@ REGIEBERICHT_FELDER = """
 """
 
 
+def _encode_image(path: str) -> tuple[str, str]:
+    ext = path.rsplit(".", 1)[-1].lower()
+    media_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+    with open(path, "rb") as f:
+        data = base64.standard_b64encode(f.read()).decode("utf-8")
+    return data, media_type
+
+
 def _build_prompt(lv_text: str, report_type: str) -> str:
     felder = BAUTAGESBERICHT_FELDER if report_type == "bautagesbericht" else REGIEBERICHT_FELDER
 
     lv_kontext = f"""
 LEISTUNGSVERZEICHNIS (für LV-Positionen Zuordnung):
-{lv_text[:80000]}
+{lv_text[:60000]}
 """ if lv_text else "Kein LV vorhanden."
 
     if report_type == "bautagesbericht":
@@ -59,86 +67,64 @@ Ordne die Arbeiten den LV-Positionen zu wenn möglich.
 Erfinde KEINE Mengen - diese werden manuell eingetragen."""
     else:
         aufgabe = """Erstelle einen Regiebericht für Straßen- und Tiefbau.
-Das sind Arbeiten die NICHT im Leistungsverzeichnis stehen (Zusatzarbeiten, unvorhergesehenes).
+Das sind Arbeiten die NICHT im Leistungsverzeichnis stehen.
 Erkläre warum diese Arbeiten als Regie abgerechnet werden.
-Stunden und Mengen werden manuell eingetragen - setze diese auf 0."""
+Stunden und Mengen auf 0 setzen."""
 
     return f"""Du bist Polier im Straßen- und Tiefbau. {aufgabe}
 
-WICHTIGE REGELN:
-- Sei ehrlich: Wenn du etwas nicht sicher erkennen kannst, schreibe es in "ki_hinweise"
-- Erfinde keine Mengen (Meter, m², Tonnen) - diese sieht man nicht auf Fotos
-- Verwende Fachbegriffe aus dem Tiefbau (z.B. "Leitungsgraben", "Frostschutzschicht", "Verdichtung")
-- Antworte AUSSCHLIESSLICH als gültiges JSON ohne Markdown-Formatierung
+REGELN:
+- Wenn du etwas nicht sicher erkennen kannst → in "ki_hinweise" schreiben
+- Keine Mengen erfinden (Meter, m², Tonnen)
+- Fachbegriffe Tiefbau verwenden
+- Antwort NUR als JSON, kein Text davor oder danach
 
 {lv_kontext}
 
 JSON STRUKTUR:
-{felder}
-
-Antworte nur mit dem JSON-Objekt, kein Text davor oder danach."""
+{felder}"""
 
 
 def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbericht") -> dict:
-    if not config.GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY fehlt in der .env Datei")
+    if not config.GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY fehlt in der .env Datei")
 
-    genai.configure(api_key=config.GEMINI_API_KEY)
+    client = Groq(api_key=config.GROQ_API_KEY)
 
-    # Bilder hochladen (max 10)
-    uploads = []
-    for path in image_paths[:config.MAX_BILDER_PRO_TAG]:
+    # Bilder als base64 vorbereiten (max 10, Groq empfiehlt max 5 für beste Ergebnisse)
+    content = []
+    for path in image_paths[:5]:
         try:
-            uploads.append(genai.upload_file(path))
+            data, media_type = _encode_image(path)
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{media_type};base64,{data}"}
+            })
         except Exception as e:
-            print(f"Bild konnte nicht hochgeladen werden {path}: {e}")
+            print(f"Bild konnte nicht geladen werden {path}: {e}")
 
-    if not uploads:
-        raise ValueError("Keine Bilder konnten hochgeladen werden")
+    if not content:
+        raise ValueError("Keine Bilder konnten geladen werden")
 
-    prompt = _build_prompt(lv_text, report_type)
+    content.append({"type": "text", "text": _build_prompt(lv_text, report_type)})
 
-    # Modelle der Reihe nach versuchen
-    modelle = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
-    response = None
+    response = client.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=[{"role": "user", "content": content}],
+        response_format={"type": "json_object"},
+        max_tokens=2000
+    )
 
-    for modell_name in modelle:
-        try:
-            model = genai.GenerativeModel(
-                modell_name,
-                generation_config={"response_mime_type": "application/json"}
-            )
-            for versuch in range(3):
-                try:
-                    response = model.generate_content([prompt, *uploads])
-                    break
-                except Exception as e:
-                    if "429" in str(e) and versuch < 2:
-                        print(f"Quota Limit — warte 60 Sekunden...")
-                        time.sleep(60)
-                    else:
-                        raise
-            break
-        except Exception as e:
-            if "404" in str(e) or "not found" in str(e).lower():
-                print(f"Modell {modell_name} nicht verfügbar, versuche nächstes...")
-                continue
-            raise
+    raw = response.choices[0].message.content.strip()
 
-    if not response:
-        raise ValueError("Kein Gemini-Modell verfügbar. Bitte API-Key prüfen.")
-
-    raw = response.text.strip()
-
-    # JSON extrahieren falls Markdown vorhanden
+    # JSON extrahieren falls nötig
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         raw = match.group(0)
 
     data = json.loads(raw)
 
-    # Sicherheitscheck: ist es wirklich ein Baustellen-Foto?
     if not data.get("ist_baustelle", True):
-        raise ValueError("Kein Baustellen-Foto erkannt. Bitte nur Baustellen-Bilder hochladen.")
+        raise ValueError("Kein Baustellen-Foto erkannt.")
 
     return data
