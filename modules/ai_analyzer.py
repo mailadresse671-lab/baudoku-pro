@@ -84,10 +84,6 @@ def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbe
         raise ValueError("GEMINI_API_KEY fehlt in der .env Datei")
 
     genai.configure(api_key=config.GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        "gemini-1.5-flash",
-        generation_config={"response_mime_type": "application/json"}
-    )
 
     # Bilder hochladen (max 10)
     uploads = []
@@ -102,17 +98,35 @@ def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbe
 
     prompt = _build_prompt(lv_text, report_type)
 
-    # Mit Retry bei Quota-Fehler
-    for versuch in range(3):
+    # Modelle der Reihe nach versuchen
+    modelle = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
+    response = None
+
+    for modell_name in modelle:
         try:
-            response = model.generate_content([prompt, *uploads])
+            model = genai.GenerativeModel(
+                modell_name,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            for versuch in range(3):
+                try:
+                    response = model.generate_content([prompt, *uploads])
+                    break
+                except Exception as e:
+                    if "429" in str(e) and versuch < 2:
+                        print(f"Quota Limit — warte 60 Sekunden...")
+                        time.sleep(60)
+                    else:
+                        raise
             break
         except Exception as e:
-            if "429" in str(e) and versuch < 2:
-                print(f"Quota Limit — warte 60 Sekunden...")
-                time.sleep(60)
-            else:
-                raise
+            if "404" in str(e) or "not found" in str(e).lower():
+                print(f"Modell {modell_name} nicht verfügbar, versuche nächstes...")
+                continue
+            raise
+
+    if not response:
+        raise ValueError("Kein Gemini-Modell verfügbar. Bitte API-Key prüfen.")
 
     raw = response.text.strip()
 
