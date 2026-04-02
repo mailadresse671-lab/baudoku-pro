@@ -8,11 +8,11 @@ import config
 
 
 def _encode_image(path: str) -> tuple[str, str]:
-    """Bild auf max 640px verkleinern und stark komprimieren für API."""
+    """Bild auf max 480px verkleinern für API."""
     img = Image.open(path)
-    img.thumbnail((640, 640), Image.LANCZOS)
+    img.thumbnail((480, 480), Image.LANCZOS)
     buffer = io.BytesIO()
-    img.convert("RGB").save(buffer, format="JPEG", quality=55)
+    img.convert("RGB").save(buffer, format="JPEG", quality=40)
     buffer.seek(0)
     return base64.standard_b64encode(buffer.read()).decode("utf-8"), "image/jpeg"
 
@@ -68,8 +68,8 @@ def _build_prompt(lv_text: str, report_type: str) -> str:
     felder = BAUTAGESBERICHT_FELDER if report_type == "bautagesbericht" else REGIEBERICHT_FELDER
 
     lv_kontext = f"""
-LEISTUNGSVERZEICHNIS (für LV-Positionen Zuordnung):
-{lv_text[:60000]}
+LEISTUNGSVERZEICHNIS (Auszug für LV-Positionen):
+{lv_text[:8000]}
 """ if lv_text else "Kein LV vorhanden."
 
     if report_type == "bautagesbericht":
@@ -105,7 +105,7 @@ def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbe
 
     # Bilder als base64 vorbereiten (max 10, Groq empfiehlt max 5 für beste Ergebnisse)
     content = []
-    for path in image_paths[:5]:
+    for path in image_paths[:2]:
         try:
             data, media_type = _encode_image(path)
             content.append({
