@@ -309,18 +309,75 @@ body {
 }
 
 /* ─── LV-Picker ─── */
-.lv-picker-row {
+.lv-ergebnisse {
+  display: none;
+  border: 1px solid var(--grau-border);
+  border-radius: 10px;
+  margin-top: 6px;
+  background: #fff;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  position: relative;
+}
+.lv-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  transition: background 0.15s;
+}
+.lv-item:last-child { border-bottom: none; }
+.lv-item:hover, .lv-item:active { background: #e8f4ff; }
+.lv-item-ausgewaehlt { background: #d4edda; color: #155724; }
+.lv-item mark {
+  background: #fff3cd;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.lv-kein-treffer {
+  padding: 14px;
+  color: #888;
+  font-size: 0.9rem;
+  text-align: center;
+}
+/* Chips – ausgewählte Positionen */
+.lv-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-top: 10px;
+}
+.lv-chip {
+  display: flex;
   align-items: center;
+  gap: 6px;
+  background: #d4edda;
+  border: 1px solid #a8d5b5;
+  border-radius: 20px;
+  padding: 6px 10px 6px 14px;
+  font-size: 0.85rem;
+  color: #155724;
+  max-width: 100%;
 }
-.lv-picker-input {
-  flex: 1;
-  min-width: 0;
-}
-.lv-add-btn {
+.lv-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 10px 16px;
-  font-size: 0.95rem;
+  max-width: calc(100vw - 120px);
 }
+.lv-chip-x {
+  background: none;
+  border: none;
+  color: #155724;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.lv-chip-x:hover { opacity: 1; }

@@ -26,7 +26,7 @@
 </div>
 {% endif %}
 
-<form action="/bestaetigen/{{ entwurf_id }}" method="post">
+<form action="/bestaetigen/{{ entwurf_id }}" method="post" id="haupt-form">
 
   {% if report_type == 'bautagesbericht' %}
   <!-- ─── WETTER ─── -->
@@ -83,21 +83,26 @@
   <!-- ─── LV-POSITIONEN ─── -->
   <div class="form-section">
     <div class="form-section-title">📑 LV-Positionen</div>
-    <div class="form-hint">Position suchen → Hinzufügen. Mengen bitte selbst eintragen.</div>
+    <div class="form-hint">Stichwort eingeben → aus Liste auswählen</div>
 
-    <!-- Suchfeld mit Vorschlagsliste -->
-    <div class="lv-picker-row">
-      <input type="text" id="lv-suche"
-             list="lv-vorschlagsliste"
-             class="form-input lv-picker-input"
-             placeholder="Pos. suchen z.B. Leerrohr, Kabel...">
-      <datalist id="lv-vorschlagsliste"></datalist>
-      <button type="button" class="btn btn-primary lv-add-btn" onclick="lvHinzufuegen()">
-        + Hinzufügen
-      </button>
+    <!-- Suchfeld -->
+    <input type="text" id="lv-suche" class="form-input"
+           placeholder="z.B.: fundament, ausschalen, rohr, kabel, perimeter..."
+           autocomplete="off">
+
+    <!-- Live-Ergebnisliste -->
+    <div id="lv-ergebnisse" class="lv-ergebnisse"></div>
+
+    <!-- Ausgewählte Positionen als Chips -->
+    <div id="lv-chips" class="lv-chips"></div>
+
+    <!-- Hidden textarea für Formular-Submit -->
+    <textarea name="lv_positionen" id="lv-positionen-hidden"
+              style="display:none">{{ (ki_daten.lv_positionen or []) | join('\n') }}</textarea>
+
+    <div id="lv-leer-hint" class="form-hint" style="color:#999; margin-top:4px">
+      Noch keine Position ausgewählt.
     </div>
-
-    <textarea name="lv_positionen" id="lv-positionen-ta" class="form-textarea" rows="5">{{ (ki_daten.lv_positionen or []) | join('\n') }}</textarea>
   </div>
 
   {% endif %}{# bautagesbericht #}
@@ -159,42 +164,143 @@
 </form>
 
 <script>
-// LV-Positionen vom Server laden und in Datalist eintragen
-(function() {
-  fetch('/lv/{{ projekt }}')
-    .then(function(r) { return r.json(); })
-    .then(function(positionen) {
-      var dl = document.getElementById('lv-vorschlagsliste');
-      if (!dl) return;
-      positionen.forEach(function(p) {
-        var opt = document.createElement('option');
-        opt.value = p.anzeige;
-        dl.appendChild(opt);
-      });
-    })
-    .catch(function() { /* kein LV vorhanden – ignorieren */ });
-})();
+// ── LV-Picker ──────────────────────────────────────────────
+var allePositionen = [];   // alle LV-Positionen vom Server
+var ausgewaehlt   = [];    // aktuell ausgewählte Positionen (Array von strings)
 
-function lvHinzufuegen() {
-  var input = document.getElementById('lv-suche');
-  var ta = document.getElementById('lv-positionen-ta');
-  var val = input.value.trim();
-  if (!val) return;
-  if (ta.value.trim()) {
-    ta.value += '\n' + val;
-  } else {
-    ta.value = val;
-  }
-  input.value = '';
-  input.focus();
+// Beim Laden: vorhandene KI-Vorschläge als Chips darstellen
+var vorhandeneTa = document.getElementById('lv-positionen-hidden');
+if (vorhandeneTa && vorhandeneTa.value.trim()) {
+  vorhandeneTa.value.trim().split('\n').forEach(function(zeile) {
+    zeile = zeile.trim();
+    if (zeile) ausgewaehlt.push(zeile);
+  });
 }
 
-// Enter-Taste im Suchfeld = Hinzufügen
-document.getElementById('lv-suche').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    lvHinzufuegen();
+// LV-Positionen vom Server laden
+fetch('/lv/{{ projekt }}')
+  .then(function(r) { return r.json(); })
+  .then(function(positionen) {
+    allePositionen = positionen;
+    chipsAktualisieren();
+  })
+  .catch(function() { /* kein LV – kein Problem */ });
+
+// Suche: Live-Filter während Eingabe
+document.getElementById('lv-suche').addEventListener('input', function() {
+  var suche = this.value.trim().toLowerCase();
+  var ergebnisDiv = document.getElementById('lv-ergebnisse');
+
+  if (!suche || suche.length < 2) {
+    ergebnisDiv.innerHTML = '';
+    ergebnisDiv.style.display = 'none';
+    return;
+  }
+
+  // Alle Wörter müssen vorkommen (AND-Suche)
+  var woerter = suche.split(/\s+/);
+  var treffer = allePositionen.filter(function(p) {
+    var text = p.anzeige.toLowerCase();
+    return woerter.every(function(w) { return text.indexOf(w) !== -1; });
+  }).slice(0, 12);  // max 12 Ergebnisse
+
+  if (!treffer.length) {
+    ergebnisDiv.innerHTML = '<div class="lv-kein-treffer">Keine Positionen gefunden</div>';
+    ergebnisDiv.style.display = 'block';
+    return;
+  }
+
+  ergebnisDiv.innerHTML = '';
+  treffer.forEach(function(p) {
+    var item = document.createElement('div');
+    item.className = 'lv-item';
+
+    // Suchbegriffe im Text hervorheben
+    var anzeige = p.anzeige;
+    woerter.forEach(function(w) {
+      var re = new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+      anzeige = anzeige.replace(re, '<mark>$1</mark>');
+    });
+
+    item.innerHTML = anzeige;
+
+    // Schon ausgewählt?
+    if (ausgewaehlt.indexOf(p.anzeige) !== -1) {
+      item.classList.add('lv-item-ausgewaehlt');
+      item.innerHTML += ' ✓';
+    }
+
+    item.addEventListener('click', function() {
+      positionToggle(p.anzeige);
+      // Suchfeld leeren, Liste schließen
+      document.getElementById('lv-suche').value = '';
+      ergebnisDiv.innerHTML = '';
+      ergebnisDiv.style.display = 'none';
+    });
+
+    ergebnisDiv.appendChild(item);
+  });
+  ergebnisDiv.style.display = 'block';
+});
+
+// Klick außerhalb schließt die Liste
+document.addEventListener('click', function(e) {
+  var suche = document.getElementById('lv-suche');
+  var erg   = document.getElementById('lv-ergebnisse');
+  if (e.target !== suche && !erg.contains(e.target)) {
+    erg.innerHTML = '';
+    erg.style.display = 'none';
   }
 });
+
+function positionToggle(anzeige) {
+  var idx = ausgewaehlt.indexOf(anzeige);
+  if (idx === -1) {
+    ausgewaehlt.push(anzeige);
+  } else {
+    ausgewaehlt.splice(idx, 1);
+  }
+  chipsAktualisieren();
+}
+
+function chipsAktualisieren() {
+  var container = document.getElementById('lv-chips');
+  var hint      = document.getElementById('lv-leer-hint');
+  var hidden    = document.getElementById('lv-positionen-hidden');
+
+  container.innerHTML = '';
+
+  if (!ausgewaehlt.length) {
+    hint.style.display = 'block';
+    hidden.value = '';
+    return;
+  }
+
+  hint.style.display = 'none';
+
+  ausgewaehlt.forEach(function(pos) {
+    var chip = document.createElement('div');
+    chip.className = 'lv-chip';
+
+    var text = document.createElement('span');
+    text.textContent = pos;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'lv-chip-x';
+    btn.textContent = '×';
+    btn.setAttribute('aria-label', 'Entfernen');
+    btn.addEventListener('click', function() {
+      positionToggle(pos);
+    });
+
+    chip.appendChild(text);
+    chip.appendChild(btn);
+    container.appendChild(chip);
+  });
+
+  // Hidden textarea für Formular aktualisieren
+  hidden.value = ausgewaehlt.join('\n');
+}
 </script>
 {% endblock %}
