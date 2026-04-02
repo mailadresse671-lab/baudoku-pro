@@ -66,13 +66,15 @@ def bautagesbericht(template_path: str, output_path: str, data: dict,
     else:
         ws = wb.active
 
-    # ── Kopfdaten nur auf Montag schreiben ──
+    # ── Kopfdaten auf JEDEM Tab schreiben (nicht nur Montag) ──
+    _w(ws, "C2", projekt_info.get("auftraggeber", ""))
+    _w(ws, "C3", projekt_info.get("baustelle", ""))
+    _w(ws, "C4", dt)
+    _w(ws, "C6", projekt_info.get("bearbeiter", ""))
+
+    # Bericht-Nr nur auf Montag (andere Tabs haben Formel +1)
     if ist_montag:
         _w(ws, "D1", bericht_nr)
-        _w(ws, "C2", projekt_info.get("auftraggeber", ""))
-        _w(ws, "C3", projekt_info.get("baustelle", ""))
-        _w(ws, "C4", dt)           # Datum als Python-Datum (Excel formatiert selbst)
-        _w(ws, "C6", projekt_info.get("bearbeiter", ""))
 
     # ── Tagesdaten (alle Wochentage) ──
     _w(ws, "B8", data.get("wetter_vormittag", ""))
