@@ -8,39 +8,87 @@
   <div class="page-title">📷 {{ datum_anzeige }}</div>
 </div>
 
-<div class="info-box">
-  <span>{{ bilder|length }} Fotos</span>
-  <span>{{ projekt }}</span>
-</div>
-
+<!-- Fotos -->
 <div class="foto-grid-gross">
   {% for bild in bilder %}
   <img src="/foto/{{ bild | replace(basis_pfad + '/', '') }}"
        class="foto-gross" loading="lazy" alt="Foto {{ loop.index }}">
   {% endfor %}
 </div>
+<div class="foto-anzahl-hint">{{ bilder|length }} Fotos · Zum Vergrößern antippen</div>
 
-<div class="form-submit">
-  <form action="/analysiere/{{ projekt }}/{{ datum }}" method="post">
-    <button type="submit" class="btn btn-primary btn-lg">
-      ⚡ Bericht aus diesen Fotos erstellen
+<!-- Stichworte-Eingabe -->
+<form action="/analysiere/{{ projekt }}/{{ datum }}" method="post" id="analyse-form">
+
+  <div class="form-section stichworte-section">
+    <div class="form-section-title">✏️ Was wurde heute gemacht?</div>
+    <div class="form-hint">
+      Kurz beschreiben – 2–5 Stichworte reichen. Die KI schreibt den Berichtstext daraus.
+    </div>
+    <textarea name="stichworte" id="stichworte" class="form-textarea stichworte-ta"
+              rows="4" required
+              placeholder="Beispiele:
+perimeterschutz betonieren, bauzaun stellen
+kabelgraben ausheben, leerrohre verlegen, verfüllen
+leitplanken demontieren, neue schutzplanken einbauen"></textarea>
+
+    <div class="stichworte-beispiele">
+      <div class="beispiele-label">Schnellauswahl:</div>
+      <div class="beispiele-chips">
+        <button type="button" class="chip-btn" onclick="addStichworte('Erdaushub')">Erdaushub</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Leerrohre verlegen')">Leerrohre verlegen</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Kabelgraben')">Kabelgraben</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Perimeterschutz betonieren')">Perimeterschutz betonieren</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Bauzaun stellen')">Bauzaun stellen</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Zaunpfosten setzen')">Zaunpfosten setzen</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Leitplanken einbauen')">Leitplanken einbauen</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Schalungsarbeiten')">Schalungsarbeiten</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Verfüllen und verdichten')">Verfüllen und verdichten</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Asphalt einbauen')">Asphalt einbauen</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Betonarbeiten')">Betonarbeiten</button>
+        <button type="button" class="chip-btn" onclick="addStichworte('Aufräumarbeiten')">Aufräumarbeiten</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-submit">
+    <button type="submit" class="btn btn-primary btn-lg" id="analyse-btn">
+      ⚡ Bericht erstellen
     </button>
-  </form>
-  <a href="/projekt/{{ projekt }}" class="btn btn-secondary btn-lg">Zurück</a>
-</div>
+    <a href="/projekt/{{ projekt }}" class="btn btn-secondary btn-lg">Zurück</a>
+  </div>
 
+</form>
+
+<!-- Ladeoverlay -->
 <div id="ladeoverlay" style="display:none" class="ladeoverlay">
   <div class="ladeoverlay-box">
     <div class="lade-spinner">⏳</div>
-    <div class="lade-text">KI analysiert Fotos…</div>
-    <div class="lade-hint">Das dauert ca. 20–40 Sekunden</div>
+    <div class="lade-text">Bericht wird erstellt…</div>
+    <div class="lade-hint">Dauert ca. 15–30 Sekunden</div>
   </div>
 </div>
 
 <script>
-document.querySelector('form').addEventListener('submit', function() {
-  document.querySelector('button[type=submit]').disabled = true;
+document.getElementById('analyse-form').addEventListener('submit', function() {
+  var ta = document.getElementById('stichworte');
+  if (!ta.value.trim()) {
+    ta.focus();
+    return false;
+  }
+  document.getElementById('analyse-btn').disabled = true;
   document.getElementById('ladeoverlay').style.display = 'flex';
 });
+
+function addStichworte(text) {
+  var ta = document.getElementById('stichworte');
+  var aktuell = ta.value.trim();
+  if (aktuell) {
+    ta.value = aktuell + '\n' + text;
+  } else {
+    ta.value = text;
+  }
+  ta.focus();
+}
 </script>
 {% endblock %}

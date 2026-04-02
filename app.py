@@ -164,9 +164,10 @@ def analysiere(name: str, datum: str):
         return jsonify({"fehler": "Keine Fotos für dieses Datum gefunden."}), 400
 
     lv_text = lade_lv_fuer_ki(name)
+    stichworte = request.form.get("stichworte", "").strip()
 
     try:
-        ki_daten = ai_analyzer.analyze(bilder, lv_text, report_type)
+        ki_daten = ai_analyzer.analyze(bilder, lv_text, report_type, stichworte)
     except ValueError as e:
         return jsonify({"fehler": str(e)}), 400
     except Exception as e:
