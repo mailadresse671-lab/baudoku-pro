@@ -31,18 +31,16 @@
         <span class="status-badge status-offen">⏳ Offen</span>
       {% endif %}
     </div>
-    {% if tag.status != 'fertig' %}
     <div class="tag-actions">
+      <a href="/fotos/{{ projekt }}/{{ tag.datum_key }}" class="btn btn-foto">
+        🔍 Fotos ansehen
+      </a>
+      {% if tag.status != 'fertig' %}
       <form action="/analysiere/{{ projekt }}/{{ tag.datum_key }}" method="post">
-        <input type="hidden" name="report_type" value="bautagesbericht">
-        <button type="submit" class="btn btn-primary">📋 Tagesbericht</button>
+        <button type="submit" class="btn btn-primary">⚡ Bericht erstellen</button>
       </form>
-      <form action="/analysiere/{{ projekt }}/{{ tag.datum_key }}" method="post">
-        <input type="hidden" name="report_type" value="regiebericht">
-        <button type="submit" class="btn btn-regie">📝 Regiebericht</button>
-      </form>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
   {% endfor %}
 </div>

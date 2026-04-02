@@ -117,6 +117,19 @@ def index():
     return render_template("index.html", projekte=projekte)
 
 
+@app.route("/fotos/<name>/<datum>")
+def fotos_tag(name: str, datum: str):
+    """Zeigt alle Fotos eines Tages als Vorschau."""
+    fotos_pro_tag = photo_manager.lade_fotos(projekt_pfad(name))
+    bilder = fotos_pro_tag.get(datum, [])
+    dt = datetime.strptime(datum, "%Y-%m-%d")
+    return render_template("fotos.html",
+                           projekt=name,
+                           datum=datum,
+                           datum_anzeige=dt.strftime("%d.%m.%Y"),
+                           bilder=bilder)
+
+
 @app.route("/projekt/<name>")
 def projekt(name: str):
     if name not in liste_projekte():

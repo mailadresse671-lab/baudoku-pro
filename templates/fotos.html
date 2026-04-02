@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Fotos {{ datum_anzeige }}{% endblock %}
+{% block header_sub %}{{ datum_anzeige }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/projekt/{{ projekt }}" class="btn btn-back">← Zurück</a>
+  <div class="page-title">📷 {{ datum_anzeige }}</div>
+</div>
+
+<div class="info-box">
+  <span>{{ bilder|length }} Fotos</span>
+  <span>{{ projekt }}</span>
+</div>
+
+<div class="foto-grid-gross">
+  {% for bild in bilder %}
+  <img src="/foto/{{ bild | replace(basis_pfad + '/', '') }}"
+       class="foto-gross" loading="lazy" alt="Foto {{ loop.index }}">
+  {% endfor %}
+</div>
+
+<div class="form-submit">
+  <form action="/analysiere/{{ projekt }}/{{ datum }}" method="post">
+    <button type="submit" class="btn btn-primary btn-lg">
+      ⚡ Bericht aus diesen Fotos erstellen
+    </button>
+  </form>
+  <a href="/projekt/{{ projekt }}" class="btn btn-secondary btn-lg">Zurück</a>
+</div>
+
+<div id="ladeoverlay" style="display:none" class="ladeoverlay">
+  <div class="ladeoverlay-box">
+    <div class="lade-spinner">⏳</div>
+    <div class="lade-text">KI analysiert Fotos…</div>
+    <div class="lade-hint">Das dauert ca. 20–40 Sekunden</div>
+  </div>
+</div>
+
+<script>
+document.querySelector('form').addEventListener('submit', function() {
+  document.querySelector('button[type=submit]').disabled = true;
+  document.getElementById('ladeoverlay').style.display = 'flex';
+});
+</script>
+{% endblock %}

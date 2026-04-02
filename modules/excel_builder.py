@@ -5,12 +5,12 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Alignment
 
-ZEICHEN_PRO_ZEILE = 85
+ZEICHEN_PRO_ZEILE = 90
 WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
 
-def _schreibe_zelle(ws, cell_ref: str, wert):
-    """Schreibt in eine Zelle, auch wenn sie Teil einer verbundenen Zelle ist."""
+def _w(ws, cell_ref: str, wert):
+    """Schreibt in eine Zelle, respektiert verbundene Zellen."""
     try:
         target = ws[cell_ref]
         for rng in ws.merged_cells.ranges:
@@ -23,7 +23,7 @@ def _schreibe_zelle(ws, cell_ref: str, wert):
         pass
 
 
-def _schreibe_liste(ws, start_cell: str, items: list):
+def _wl(ws, start_cell: str, items: list):
     """Schreibt eine Liste zeilenweise ab einer Startzelle."""
     if not items:
         return
@@ -48,62 +48,66 @@ def bautagesbericht(template_path: str, output_path: str, data: dict,
                     datum: str, bericht_nr: int, projekt_info: dict):
     """
     Füllt die Bautagesbericht-Vorlage.
-    datum: "DD.MM.YYYY"
-    projekt_info: {"auftraggeber": ..., "baustelle": ..., "bearbeiter": ...}
+    Montag:    Schreibt Kopfdaten + Tagesdaten
+    Di-Sa:     Schreibt NUR Tagesdaten (Kopfdaten sind Formeln die auf Montag zeigen)
     """
-    shutil.copy2(template_path, output_path)
+    # Nur kopieren wenn noch nicht vorhanden (Wochendatei bleibt bestehen)
+    if not os.path.exists(output_path):
+        shutil.copy2(template_path, output_path)
+
     wb = openpyxl.load_workbook(output_path, keep_vba=True)
 
     dt = datetime.strptime(datum, "%d.%m.%Y")
     tag_name = WOCHENTAGE[dt.weekday()]
+    ist_montag = dt.weekday() == 0
 
     if tag_name in wb.sheetnames:
         ws = wb[tag_name]
     else:
         ws = wb.active
 
-    w = lambda cell, val: _schreibe_zelle(ws, cell, val)
-    wl = lambda cell, items: _schreibe_liste(ws, cell, items)
+    # ── Kopfdaten nur auf Montag schreiben ──
+    if ist_montag:
+        _w(ws, "D1", bericht_nr)
+        _w(ws, "C2", projekt_info.get("auftraggeber", ""))
+        _w(ws, "C3", projekt_info.get("baustelle", ""))
+        _w(ws, "C4", dt)           # Datum als Python-Datum (Excel formatiert selbst)
+        _w(ws, "C6", projekt_info.get("bearbeiter", ""))
 
-    # Kopfdaten
-    w("D1", bericht_nr)
-    w("F1", bericht_nr)
-    w("C2", projekt_info.get("auftraggeber", ""))
-    w("C3", projekt_info.get("baustelle", ""))
-    w("C4", datum)
-    w("C6", projekt_info.get("bearbeiter", ""))
+    # ── Tagesdaten (alle Wochentage) ──
+    _w(ws, "B8", data.get("wetter_vormittag", ""))
+    _w(ws, "B9", data.get("wetter_nachmittag", ""))
+    _w(ws, "H8", data.get("temp_min", ""))
+    _w(ws, "H9", data.get("temp_max", ""))
 
-    # Wetter
-    w("B8", data.get("wetter_vormittag", ""))
-    w("B9", data.get("wetter_nachmittag", ""))
-    w("H8", data.get("temp_min", ""))
-    w("H9", data.get("temp_max", ""))
-
-    # Personal
     p1 = int(data.get("personal_aufsicht", 0))
     p2 = int(data.get("personal_facharbeiter", 0))
     p3 = int(data.get("personal_maschinist", 0))
-    w("C11", p1)
-    w("C12", p2)
-    w("C13", p3)
-    w("C15", p1 + p2 + p3)
+    _w(ws, "C11", p1)
+    _w(ws, "C12", p2)
+    _w(ws, "C13", p3)
 
-    # Arbeiten - LV-Positionen + Beschreibung zusammenführen
-    arbeiten = list(data.get("beschreibung_arbeiten", []))
-    lv_pos = data.get("lv_positionen", [])
-    if lv_pos:
-        arbeiten = lv_pos + ["---"] + arbeiten if arbeiten else lv_pos
-    wl("B17", arbeiten)
+    # Arbeiten: LV-Positionen zuerst, dann Beschreibung
+    arbeiten = list(data.get("lv_positionen", []))
+    beschreibung = data.get("beschreibung_arbeiten", [])
+    if arbeiten and beschreibung:
+        arbeiten += ["---"] + beschreibung
+    elif beschreibung:
+        arbeiten = beschreibung
 
-    # Geräte + Material + Sonstiges
-    wl("B32", data.get("geraete_liste", []))
-    wl("B37", data.get("material_liste", []))
+    # Regiebericht-Hinweis anhängen
+    if data.get("regiebericht_erstellt"):
+        arbeiten += [f"→ Regiebericht Nr. {data['regiebericht_nr']} wurde erstellt"]
+
+    _wl(ws, "B17", arbeiten)
+    _wl(ws, "B32", data.get("geraete_liste", []))
+    _wl(ws, "B37", data.get("material_liste", []))
 
     sonstiges = list(data.get("sonstiges", []))
     hinweise = data.get("ki_hinweise", [])
     if hinweise:
         sonstiges += ["KI-Hinweise:"] + [f"- {h}" for h in hinweise]
-    wl("B41", sonstiges)
+    _wl(ws, "B42", sonstiges)
 
     wb.save(output_path)
     return output_path
@@ -112,46 +116,43 @@ def bautagesbericht(template_path: str, output_path: str, data: dict,
 def regiebericht(template_path: str, output_path: str, data: dict,
                  datum: str, bericht_nr: int, projekt_info: dict):
     """
-    Füllt die Regiebericht-Vorlage.
+    Füllt die Regiebericht-Vorlage mit den Feldern die die KI liefern kann.
+    Personalstunden und Details muss der Polier manuell nachtragen.
     """
     shutil.copy2(template_path, output_path)
     wb = openpyxl.load_workbook(output_path, keep_vba=True)
-    ws = wb.active
+    ws = wb["Regiebericht"] if "Regiebericht" in wb.sheetnames else wb.active
 
-    w = lambda cell, val: _schreibe_zelle(ws, cell, val)
-    wl = lambda cell, items: _schreibe_liste(ws, cell, items)
+    dt = datetime.strptime(datum, "%d.%m.%Y")
 
     # Kopfdaten
-    w("D1", bericht_nr)
-    w("C2", projekt_info.get("auftraggeber", ""))
-    w("C3", projekt_info.get("baustelle", ""))
-    w("C4", datum)
-    w("C6", projekt_info.get("bearbeiter", ""))
+    _w(ws, "H1", bericht_nr)
+    _w(ws, "H2", projekt_info.get("baustelle", ""))
+    _w(ws, "H5", projekt_info.get("bearbeiter", ""))
+    _w(ws, "O6", datum)
 
-    # Beschreibung
-    wl("B8", data.get("beschreibung_arbeiten", []))
-    w("B15", data.get("grund_regie", ""))
+    # Wochentag
+    _w(ws, "E6", WOCHENTAGE[dt.weekday()])
 
-    # Personal
-    for i, p in enumerate(data.get("personal", [])[:5]):
-        row = 20 + i
-        _schreibe_zelle(ws, f"B{row}", p.get("funktion", ""))
-        _schreibe_zelle(ws, f"D{row}", p.get("anzahl", 0))
-        _schreibe_zelle(ws, f"F{row}", p.get("stunden", 0))
+    # Art der Leistung / Beschreibung (A8 bis ca. A14)
+    beschreibung = data.get("beschreibung_arbeiten", [])
+    grund = data.get("grund_regie", "")
+    if grund:
+        beschreibung = [grund] + ["---"] + beschreibung if beschreibung else [grund]
+    _wl(ws, "A8", beschreibung)
 
-    # Geräte
-    for i, g in enumerate(data.get("geraete", [])[:5]):
-        row = 30 + i
-        _schreibe_zelle(ws, f"B{row}", g.get("bezeichnung", ""))
-        _schreibe_zelle(ws, f"E{row}", g.get("einheit", "h"))
-        _schreibe_zelle(ws, f"F{row}", g.get("menge", 0))
+    # Geräte (A27+)
+    geraete = data.get("geraete_liste", [])
+    _wl(ws, "A27", geraete)
 
-    # Material
-    for i, m in enumerate(data.get("material", [])[:5]):
-        row = 38 + i
-        _schreibe_zelle(ws, f"B{row}", m.get("bezeichnung", ""))
-        _schreibe_zelle(ws, f"E{row}", m.get("einheit", ""))
-        _schreibe_zelle(ws, f"F{row}", m.get("menge", 0))
+    # Material (P27+)
+    material = data.get("material_liste", [])
+    _wl(ws, "P27", material)
+
+    # Bemerkungen (A38+)
+    bemerkungen = list(data.get("sonstiges", []))
+    bemerkungen += ["→ Stunden und Mengen bitte manuell eintragen"]
+    _wl(ws, "A38", bemerkungen)
 
     wb.save(output_path)
     return output_path
@@ -166,4 +167,9 @@ def get_output_path(projekt_pfad: str, datum: str, report_type: str, template_ex
     kw_folder = os.path.join(projekt_pfad, "1.4 Berichte", "1.4.1 Tagesberichte",
                              "Fertig", f"KW{kw}_{year}")
     os.makedirs(kw_folder, exist_ok=True)
-    return os.path.join(kw_folder, f"{typ}_{datum.replace('.', '-')}{template_ext}")
+
+    if report_type == "bautagesbericht":
+        # Wochendatei (eine Datei pro KW, alle Tage drin)
+        return os.path.join(kw_folder, f"Bautagesbericht_KW{kw}_{year}{template_ext}")
+    else:
+        return os.path.join(kw_folder, f"Regiebericht_{datum.replace('.', '-')}{template_ext}")

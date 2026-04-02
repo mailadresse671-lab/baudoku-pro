@@ -100,6 +100,7 @@ body {
   white-space: nowrap;
 }
 .btn:active { transform: scale(0.97); }
+.btn-foto     { background: #2980b9;       color: var(--weiss); }
 .btn-primary  { background: var(--gelb);   color: var(--weiss); }
 .btn-primary:hover  { background: var(--gelb-dark); }
 .btn-regie    { background: var(--regie);  color: var(--weiss); }
@@ -284,6 +285,21 @@ body {
 }
 .alert-error   { background: #fde8e8; color: var(--rot); border: 1px solid #f5c6c6; }
 .alert-success { background: #d5f5e3; color: var(--gruen-dark); }
+
+/* ─── Große Foto-Ansicht ─── */
+.foto-grid-gross {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.foto-gross {
+  width: 100%;
+  border-radius: 10px;
+  border: 2px solid var(--grau-border);
+  object-fit: cover;
+  aspect-ratio: 4/3;
+}
 
 /* ─── Responsive ─── */
 @media (max-width: 480px) {

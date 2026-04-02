@@ -8,11 +8,11 @@ import config
 
 
 def _encode_image(path: str) -> tuple[str, str]:
-    """Bild auf max 1024px verkleinern und als base64 zurückgeben."""
+    """Bild auf max 640px verkleinern und stark komprimieren für API."""
     img = Image.open(path)
-    img.thumbnail((1024, 1024), Image.LANCZOS)
+    img.thumbnail((640, 640), Image.LANCZOS)
     buffer = io.BytesIO()
-    img.convert("RGB").save(buffer, format="JPEG", quality=70)
+    img.convert("RGB").save(buffer, format="JPEG", quality=55)
     buffer.seek(0)
     return base64.standard_b64encode(buffer.read()).decode("utf-8"), "image/jpeg"
 
