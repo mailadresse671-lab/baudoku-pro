@@ -281,6 +281,38 @@ def download(name: str, unterordner: str, dateiname: str):
     return send_file(pfad, as_attachment=True, download_name=dateiname)
 
 
+@app.route("/debug_vorlage/<name>")
+def debug_vorlage(name: str):
+    """Zeigt Struktur der Excel-Vorlage – hilft bei Zell-Mapping."""
+    import openpyxl
+    vorlage = finde_vorlage(name, "bautagesbericht")
+    if not vorlage:
+        return jsonify({"fehler": "Keine Vorlage gefunden", "suchpfad": os.path.join(projekt_pfad(name), "1.4 Berichte", "1.4.1 Tagesberichte", "Vorlagen")})
+
+    wb = openpyxl.load_workbook(vorlage, keep_vba=True)
+    ergebnis = {"vorlage_pfad": vorlage, "tabs": {}}
+
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        merged = [str(r) for r in ws.merged_cells.ranges]
+        # Erste 50 Zellen mit Inhalt
+        zellen = {}
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None and str(cell.value).strip():
+                    zellen[cell.coordinate] = str(cell.value)[:60]
+                if len(zellen) >= 50:
+                    break
+            if len(zellen) >= 50:
+                break
+        ergebnis["tabs"][sheet_name] = {
+            "merged_cells": merged[:30],
+            "zellen_mit_inhalt": zellen
+        }
+
+    return jsonify(ergebnis)
+
+
 @app.route("/lv/<name>")
 def lv_positionen(name: str):
     """Gibt alle LV-Positionen als JSON zurück (für Dropdown im Entwurf)."""
