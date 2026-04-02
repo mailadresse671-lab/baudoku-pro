@@ -307,3 +307,20 @@ body {
   .page-title { font-size: 1.2rem; }
   .btn-lg { font-size: 1rem; }
 }
+
+/* ─── LV-Picker ─── */
+.lv-picker-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.lv-picker-input {
+  flex: 1;
+  min-width: 0;
+}
+.lv-add-btn {
+  white-space: nowrap;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+}

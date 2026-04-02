@@ -3,9 +3,8 @@ import json
 import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
-import pypdf
 import config
-from modules import photo_manager, ai_analyzer, excel_builder
+from modules import photo_manager, ai_analyzer, excel_builder, lv_parser
 
 app = Flask(__name__)
 app.jinja_env.globals["basis_pfad"] = config.BASIS_PFAD
@@ -38,27 +37,13 @@ def speichere_projekt_info(name: str, info: dict):
         json.dump(info, f, indent=2, ensure_ascii=False)
 
 
-def lade_lv_text(name: str) -> str:
-    lv_pfad = os.path.join(projekt_pfad(name), "Projekt_Infos")
-    text = ""
-    if not os.path.exists(lv_pfad):
-        return text
-    for f in os.listdir(lv_pfad):
-        fp = os.path.join(lv_pfad, f)
-        if f.lower().endswith(".pdf"):
-            try:
-                reader = pypdf.PdfReader(fp)
-                for page in reader.pages:
-                    text += page.extract_text() or ""
-            except Exception:
-                pass
-        elif f.lower().endswith(".txt"):
-            try:
-                with open(fp, encoding="utf-8") as fh:
-                    text += fh.read()
-            except Exception:
-                pass
-    return text
+def lade_lv_fuer_ki(name: str) -> str:
+    """Lädt LV-Positionen aus JSON (gecacht) und gibt kompakten KI-Text zurück."""
+    p_pfad = projekt_pfad(name)
+    positionen = lv_parser.lade_lv_json(p_pfad)
+    if positionen:
+        return lv_parser.lv_fuer_ki(positionen)
+    return ""
 
 
 def naechste_bericht_nr(name: str) -> int:
@@ -178,7 +163,7 @@ def analysiere(name: str, datum: str):
     if not bilder:
         return jsonify({"fehler": "Keine Fotos für dieses Datum gefunden."}), 400
 
-    lv_text = lade_lv_text(name)
+    lv_text = lade_lv_fuer_ki(name)
 
     try:
         ki_daten = ai_analyzer.analyze(bilder, lv_text, report_type)
@@ -293,6 +278,13 @@ def download(name: str, unterordner: str, dateiname: str):
     if not os.path.exists(pfad):
         return "Datei nicht gefunden", 404
     return send_file(pfad, as_attachment=True, download_name=dateiname)
+
+
+@app.route("/lv/<name>")
+def lv_positionen(name: str):
+    """Gibt alle LV-Positionen als JSON zurück (für Dropdown im Entwurf)."""
+    positionen = lv_parser.lade_lv_json(projekt_pfad(name))
+    return jsonify(positionen)
 
 
 @app.route("/foto/<path:pfad>")

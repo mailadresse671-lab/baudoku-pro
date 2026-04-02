@@ -83,8 +83,21 @@
   <!-- ─── LV-POSITIONEN ─── -->
   <div class="form-section">
     <div class="form-section-title">📑 LV-Positionen</div>
-    <div class="form-hint">Eine pro Zeile. Mengen bitte selbst eintragen.</div>
-    <textarea name="lv_positionen" class="form-textarea" rows="4">{{ (ki_daten.lv_positionen or []) | join('\n') }}</textarea>
+    <div class="form-hint">Position suchen → Hinzufügen. Mengen bitte selbst eintragen.</div>
+
+    <!-- Suchfeld mit Vorschlagsliste -->
+    <div class="lv-picker-row">
+      <input type="text" id="lv-suche"
+             list="lv-vorschlagsliste"
+             class="form-input lv-picker-input"
+             placeholder="Pos. suchen z.B. Leerrohr, Kabel...">
+      <datalist id="lv-vorschlagsliste"></datalist>
+      <button type="button" class="btn btn-primary lv-add-btn" onclick="lvHinzufuegen()">
+        + Hinzufügen
+      </button>
+    </div>
+
+    <textarea name="lv_positionen" id="lv-positionen-ta" class="form-textarea" rows="5">{{ (ki_daten.lv_positionen or []) | join('\n') }}</textarea>
   </div>
 
   {% endif %}{# bautagesbericht #}
@@ -144,4 +157,44 @@
   </div>
 
 </form>
+
+<script>
+// LV-Positionen vom Server laden und in Datalist eintragen
+(function() {
+  fetch('/lv/{{ projekt }}')
+    .then(function(r) { return r.json(); })
+    .then(function(positionen) {
+      var dl = document.getElementById('lv-vorschlagsliste');
+      if (!dl) return;
+      positionen.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.anzeige;
+        dl.appendChild(opt);
+      });
+    })
+    .catch(function() { /* kein LV vorhanden – ignorieren */ });
+})();
+
+function lvHinzufuegen() {
+  var input = document.getElementById('lv-suche');
+  var ta = document.getElementById('lv-positionen-ta');
+  var val = input.value.trim();
+  if (!val) return;
+  if (ta.value.trim()) {
+    ta.value += '\n' + val;
+  } else {
+    ta.value = val;
+  }
+  input.value = '';
+  input.focus();
+}
+
+// Enter-Taste im Suchfeld = Hinzufügen
+document.getElementById('lv-suche').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    lvHinzufuegen();
+  }
+});
+</script>
 {% endblock %}

@@ -7,15 +7,6 @@ from groq import Groq
 import config
 
 
-def _encode_image(path: str) -> tuple[str, str]:
-    """Bild auf max 480px verkleinern für API."""
-    img = Image.open(path)
-    img.thumbnail((480, 480), Image.LANCZOS)
-    buffer = io.BytesIO()
-    img.convert("RGB").save(buffer, format="JPEG", quality=40)
-    buffer.seek(0)
-    return base64.standard_b64encode(buffer.read()).decode("utf-8"), "image/jpeg"
-
 BAUTAGESBERICHT_FELDER = """
 {
   "ist_baustelle": true,
