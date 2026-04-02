@@ -7,84 +7,100 @@ from groq import Groq
 import config
 
 
+def _encode_image(path: str) -> tuple[str, str]:
+    """Bild auf max 800px verkleinern, 70% Qualität – gut für KI-Erkennung, klein genug für API."""
+    img = Image.open(path)
+    img.thumbnail((800, 800), Image.LANCZOS)
+    buffer = io.BytesIO()
+    img.convert("RGB").save(buffer, format="JPEG", quality=70)
+    buffer.seek(0)
+    return base64.standard_b64encode(buffer.read()).decode("utf-8"), "image/jpeg"
+
+
 BAUTAGESBERICHT_FELDER = """
 {
   "ist_baustelle": true,
-  "wetter_vormittag": "z.B. Sonnig, leicht bewölkt",
-  "wetter_nachmittag": "z.B. Bewölkt, Regen",
+  "wetter_vormittag": "Sonnig / Bewölkt / Regen / Schnee",
+  "wetter_nachmittag": "Sonnig / Bewölkt / Regen / Schnee",
   "temp_min": 0,
   "temp_max": 0,
-  "personal_aufsicht": 0,
+  "personal_aufsicht": 1,
   "personal_facharbeiter": 0,
   "personal_maschinist": 0,
-  "beschreibung_arbeiten": ["Zeile 1", "Zeile 2"],
-  "lv_positionen": ["Pos. 1.2.3 - Beschreibung (falls erkennbar)"],
-  "geraete_liste": ["Gerät 1", "Gerät 2"],
-  "material_liste": ["Material 1"],
+  "beschreibung_arbeiten": [
+    "Was genau zu sehen ist, z.B. Erdaushub, Rohrverlegung, Asphalteinbau, Betonarbeiten..."
+  ],
+  "lv_positionen": ["LV-Positionsnummer und Kurztext aus dem Leistungsverzeichnis"],
+  "geraete_liste": ["Bagger, Radlader, Rüttelplatte, LKW – was erkennbar ist"],
+  "material_liste": ["Rohre, Kies, Beton, Asphalt, Stahl – was erkennbar ist"],
   "sonstiges": [],
-  "ki_hinweise": ["Was die KI nicht sicher erkennen konnte"]
+  "ki_hinweise": ["Was nicht sicher erkennbar war"]
 }
 """
 
 REGIEBERICHT_FELDER = """
 {
   "ist_baustelle": true,
-  "beschreibung_arbeiten": ["Zeile 1", "Zeile 2"],
-  "grund_regie": "Warum ist das Regiearbeit (nicht im LV)",
+  "beschreibung_arbeiten": ["Was genau zu sehen ist"],
+  "grund_regie": "Warum Regiearbeit: z.B. nicht im LV enthalten, Zusatzarbeit, Änderung",
   "personal": [
     {"funktion": "Polier", "anzahl": 1, "stunden": 0},
     {"funktion": "Facharbeiter", "anzahl": 0, "stunden": 0},
     {"funktion": "Maschinist", "anzahl": 0, "stunden": 0}
   ],
   "geraete": [
-    {"bezeichnung": "Bagger Takeuchi 6t", "einheit": "h", "menge": 0}
+    {"bezeichnung": "Gerät was erkennbar ist", "einheit": "h", "menge": 0}
   ],
   "material": [
-    {"bezeichnung": "Material", "einheit": "m³", "menge": 0}
+    {"bezeichnung": "Material was erkennbar ist", "einheit": "m²", "menge": 0}
   ],
-  "ki_hinweise": ["Was die KI nicht sicher erkennen konnte"]
+  "ki_hinweise": ["Was nicht sicher erkennbar war"]
 }
 """
-
-
-def _encode_image(path: str) -> tuple[str, str]:
-    ext = path.rsplit(".", 1)[-1].lower()
-    media_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    with open(path, "rb") as f:
-        data = base64.standard_b64encode(f.read()).decode("utf-8")
-    return data, media_type
 
 
 def _build_prompt(lv_text: str, report_type: str) -> str:
     felder = BAUTAGESBERICHT_FELDER if report_type == "bautagesbericht" else REGIEBERICHT_FELDER
 
-    lv_kontext = f"""
-LEISTUNGSVERZEICHNIS (Auszug für LV-Positionen):
-{lv_text[:8000]}
-""" if lv_text else "Kein LV vorhanden."
+    lv_kontext = (
+        f"LEISTUNGSVERZEICHNIS (für LV-Positionen):\n{lv_text[:6000]}"
+        if lv_text else ""
+    )
 
     if report_type == "bautagesbericht":
-        aufgabe = """Erstelle einen Bautagesbericht für Straßen- und Tiefbau.
-Analysiere die Fotos und erkenne welche Arbeiten durchgeführt wurden.
-Ordne die Arbeiten den LV-Positionen zu wenn möglich.
-Erfinde KEINE Mengen - diese werden manuell eingetragen."""
+        aufgabe = (
+            "Analysiere diese Baustellen-Fotos aus dem Straßen- und Tiefbau.\n"
+            "Beschreibe GENAU was du siehst:\n"
+            "- Welche Bauarbeiten werden durchgeführt? (Erdaushub, Rohrverlegung, "
+            "Betonarbeiten, Asphalt, Kabelmontage, Leitplanken, Zaunbau, etc.)\n"
+            "- Welche Maschinen und Geräte sind erkennbar?\n"
+            "- Welche Materialien liegen vor oder werden verbaut?\n"
+            "- Wie viele Personen sind sichtbar?\n"
+            "- Wie ist das Wetter auf dem Foto?\n"
+            "- Welche LV-Position passt am besten dazu?"
+        )
     else:
-        aufgabe = """Erstelle einen Regiebericht für Straßen- und Tiefbau.
-Das sind Arbeiten die NICHT im Leistungsverzeichnis stehen.
-Erkläre warum diese Arbeiten als Regie abgerechnet werden.
-Stunden und Mengen auf 0 setzen."""
+        aufgabe = (
+            "Analysiere diese Baustellen-Fotos für einen Regiebericht.\n"
+            "Beschreibe GENAU was du siehst und erkläre warum diese Arbeit "
+            "als Regiearbeit abgerechnet wird (nicht im Leistungsverzeichnis).\n"
+            "Stunden und Mengen auf 0 setzen – werden manuell eingetragen."
+        )
 
-    return f"""Du bist Polier im Straßen- und Tiefbau. {aufgabe}
+    return f"""Du bist erfahrener Polier im Straßen- und Tiefbau.
 
-REGELN:
-- Wenn du etwas nicht sicher erkennen kannst → in "ki_hinweise" schreiben
-- Keine Mengen erfinden (Meter, m², Tonnen)
-- Fachbegriffe Tiefbau verwenden
-- Antwort NUR als JSON, kein Text davor oder danach
+{aufgabe}
+
+WICHTIGE REGELN:
+- Beschreibe NUR was wirklich auf den Fotos zu sehen ist
+- Keine Mengen erfinden (Meter, m², Tonnen, Stunden)
+- Fachbegriffe aus dem Tiefbau verwenden
+- Wenn etwas unklar ist → in "ki_hinweise" eintragen
+- Antwort ausschließlich als JSON-Objekt
 
 {lv_kontext}
 
-JSON STRUKTUR:
+JSON-Struktur (alle Felder ausfüllen):
 {felder}"""
 
 
@@ -94,7 +110,6 @@ def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbe
 
     client = Groq(api_key=config.GROQ_API_KEY)
 
-    # Bilder als base64 vorbereiten (max 10, Groq empfiehlt max 5 für beste Ergebnisse)
     content = []
     for path in image_paths[:2]:
         try:
@@ -111,16 +126,35 @@ def analyze(image_paths: list[str], lv_text: str, report_type: str = "bautagesbe
 
     content.append({"type": "text", "text": _build_prompt(lv_text, report_type)})
 
-    response = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        messages=[{"role": "user", "content": content}],
-        response_format={"type": "json_object"},
-        max_tokens=2000
-    )
+    # llama-4-maverick ist stärker bei Bilderkennung als scout
+    models = [
+        "meta-llama/llama-4-maverick-17b-128e-instruct",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+    ]
+
+    last_error = None
+    for model in models:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": content}],
+                response_format={"type": "json_object"},
+                max_tokens=2000
+            )
+            break
+        except Exception as e:
+            last_error = e
+            err_str = str(e)
+            # Bei 413 (zu groß) oder 404 (Modell nicht gefunden) nächstes probieren
+            if "413" in err_str or "404" in err_str or "model" in err_str.lower():
+                print(f"Modell {model} fehlgeschlagen: {e} – nächstes probieren...")
+                continue
+            raise
+    else:
+        raise ValueError(f"Alle Modelle fehlgeschlagen: {last_error}")
 
     raw = response.choices[0].message.content.strip()
 
-    # JSON extrahieren falls nötig
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         raw = match.group(0)
